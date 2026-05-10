@@ -39,7 +39,11 @@ def get_preprocessing_fn(
         A preprocessing function that takes and returns a dictionary
     """
     f = lambda x: x
-    if ds_name.startswith("self_gen") or ds_name.endswith("_compact"):
+    if (
+        ds_name.startswith("self_gen")
+        or ds_name.startswith("d2l_hypothesis/")
+        or ds_name.endswith("_compact")
+    ):
         # already processed data, do nothing
         return f
 

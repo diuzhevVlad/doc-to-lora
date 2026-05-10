@@ -34,6 +34,13 @@ COLS_TO_KEEP_PREPROCESSING = [
     "context",
     "prompts",
     "responses",
+    "condition",
+    "instruction_type",
+    "instruction",
+    "question",
+    "gold_answer",
+    "source_index",
+    "wrong_context_source_index",
     "qas",
     "variation",
     "logprobs_vals",
@@ -48,6 +55,13 @@ COLS_TO_KEEP_TOKENIZED = [
     "labels",
     "context",
     "ctx_ids",
+    "condition",
+    "instruction_type",
+    "instruction",
+    "question",
+    "gold_answer",
+    "source_index",
+    "wrong_context_source_index",
     "logprobs_vals",
     "logprobs_indices",
 ]
@@ -72,7 +86,12 @@ def get_ds_prob(train_ds_len: list[int], total_len: int):
 
 
 def load_answers(ds_name, split):
-    if ds_name.startswith("longbench"):
+    if ds_name.startswith("d2l_hypothesis/"):
+
+        def extract_ans(sample):
+            return {"answers": sample.get("all_answers") or [sample["gold_answer"]]}
+
+    elif ds_name.startswith("longbench"):
 
         def extract_ans(sample):
             return {"answers": sample["answers"]}

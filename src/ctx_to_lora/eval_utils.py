@@ -67,6 +67,16 @@ from ctx_to_lora.utils import clear_gpu, concat_list, get_run_name, setup_loggin
 
 logger = logging.getLogger()
 
+D2L_HYPOTHESIS_METADATA_KEYS = [
+    "condition",
+    "instruction_type",
+    "instruction",
+    "question",
+    "gold_answer",
+    "source_index",
+    "wrong_context_source_index",
+]
+
 
 # from https://gist.github.com/cloneofsimo/8abd0284d4738f28f04200628f9a83f5
 # https://github.com/Nordth/humanize-ai-lib/blob/main/src/humanize-string.ts
@@ -176,6 +186,77 @@ def compute_qa_f1_score(
         qa_precision=np.mean(precisions),
         qa_recall=np.mean(recalls),
     ), dict(qa_f1_score=f1_scores, qa_precision=precisions, qa_recall=recalls)
+
+
+def _word_count(text: str) -> int:
+    return len(split_string(normalize_answer(text)))
+
+
+def _is_answer_only_compliant(prediction: str, answers: list[str]) -> bool:
+    if not prediction.strip():
+        return False
+    if "\n" in prediction.strip():
+        return False
+    if re.search(
+        r"\b(according to|based on|provided text|the answer is|answer:|states that)\b",
+        prediction,
+        flags=re.IGNORECASE,
+    ):
+        return False
+
+    max_answer_words = max((_word_count(answer) for answer in answers), default=1)
+    pred_words = _word_count(prediction)
+    if re.search(r"[.!?]\s*$", prediction.strip()) and pred_words > (
+        max_answer_words + 1
+    ):
+        return False
+    return pred_words <= max(5, max_answer_words + 2)
+
+
+def _is_full_sentence_compliant(prediction: str) -> bool:
+    stripped = prediction.strip()
+    return bool(
+        re.match(r"^the answer is\s+.+\.$", stripped, flags=re.IGNORECASE)
+    )
+
+
+def compute_format_metrics(
+    pred_texts: list[str],
+    answers_list: list[list[str]],
+    decoded_txts: list[dict],
+    per_sample_metric: dict[str, list[float]],
+) -> tuple[dict[str, float | str], dict[str, list[float]]]:
+    compliances = []
+    for pred_text, answers, sample in zip(pred_texts, answers_list, decoded_txts):
+        instruction_type = sample.get("instruction_type")
+        if instruction_type == "answer_only":
+            is_compliant = _is_answer_only_compliant(pred_text, answers)
+        elif instruction_type == "full_sentence":
+            is_compliant = _is_full_sentence_compliant(pred_text)
+        else:
+            is_compliant = False
+        compliances.append(float(is_compliant))
+
+    metrics: dict[str, float | str] = {
+        "format_compliance": float(np.mean(compliances)) if compliances else 0.0,
+        "num_samples_format_compliance": len(compliances),
+    }
+
+    correctness = per_sample_metric.get("qa_f1_score")
+    if correctness is not None:
+        compliant_correctness = [
+            score for score, compliant in zip(correctness, compliances) if compliant
+        ]
+        metrics["correctness_given_compliant"] = (
+            float(np.mean(compliant_correctness))
+            if compliant_correctness
+            else "None"
+        )
+        metrics["num_samples_correctness_given_compliant"] = len(
+            compliant_correctness
+        )
+
+    return metrics, {"format_compliance": compliances}
 
 
 def add_longbench_tasks(ds_names: list[str]) -> None:
@@ -511,6 +592,12 @@ def decode_test_result(
             d["context"] = ctx_tokenizer.decode(
                 concat_list(sample["ctx_ids"]), skip_special_tokens=False
             )
+        for k in D2L_HYPOTHESIS_METADATA_KEYS:
+            if k in sample:
+                v = sample[k]
+                if hasattr(v, "item"):
+                    v = v.item()
+                d[k] = v
         for k in sample:
             if k.endswith("_len"):
                 d[k] = sample[k].item()
@@ -574,6 +661,17 @@ def eval_generation(
             for k, v in rouge_metrics.items():
                 eval_result.metrics[f"{split_name}_{k}"] = v
                 eval_result.metrics[f"{split_name}_num_samples_{k}"] = n
+
+        if any("instruction_type" in txt for txt in decoded_txts):
+            format_metrics, per_sample_format_metric = compute_format_metrics(
+                pred_texts,
+                answers_list,
+                decoded_txts,
+                per_sample_metric,
+            )
+            per_sample_metric.update(per_sample_format_metric)
+            for k, v in format_metrics.items():
+                eval_result.metrics[f"{split_name}_{k}"] = v
 
         # Ensure all keys for length metrics are present, even if a bin is empty
         for low, high in LENGTH_BINS:

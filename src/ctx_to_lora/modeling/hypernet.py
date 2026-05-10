@@ -1,3 +1,4 @@
+import gc
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -609,6 +610,13 @@ class ModulatedPretrainedModel(nn.Module):
                 f"The base model given is: {self.base_model.name_or_path}, "
                 f"but the loaded name is: {self.base_model_name_or_path}"
             )
+        if hasattr(self, "hypernet"):
+            del self.hypernet
+        if hasattr(self, "ctx_encoder"):
+            del self.ctx_encoder
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         self._init_model()
 
         def remove_compile_prefix(sd: dict[str, Tensor]) -> dict[str, Tensor]:

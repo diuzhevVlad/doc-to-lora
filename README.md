@@ -1,40 +1,61 @@
 <div align="center">
     <h1>Doc-to-LoRA (D2L): Learning to Instantly Internalize Contexts</h1>
-    :sparkles:<a href="https://pub.sakana.ai/doc-to-lora/">Interactive Web</a> |
-    :newspaper:<a href="https://x.com/SakanaAILabs">X</a> |
-    :scroll:<a href="https://arxiv.org/abs/2602.15902">Paper</a> |
-    :hugs:<a href="https://huggingface.co/SakanaAI">Hugging Face</a> |
-    :octocat:<a href="https://github.com/SakanaAI/doc-to-lora">GitHub</a>
-<br>A reference implementation of Doc-to-LoRA (D2L).<br>
+    <a href="https://pub.sakana.ai/doc-to-lora/">Interactive Web</a> |
+    <a href="https://arxiv.org/abs/2602.15902">Paper</a> |
+    <a href="https://huggingface.co/SakanaAI">Hugging Face</a> |
+    <a href="https://github.com/SakanaAI/doc-to-lora">GitHub</a>
+<br>Репозиторий с reference implementation Doc-to-LoRA и локальными экспериментами по D2L Hypothesis.<br>
 </div>
+
 <div align="center">
     <img height="300px" src="assets/overview_animation.gif" />
 </div>
 
 ---
 
-## 🛠️ Installation
-```
+## Локальный эксперимент D2L Hypothesis
+
+В этом форке добавлен эксперимент, который проверяет, что D2L переносит через LoRA-адаптер: содержательный вопрос или инструкцию о формате ответа.
+
+Основные документы:
+
+| Файл | Что внутри |
+|---|---|
+| `d2l_hypothesis_narrative.md` | короткий русский нарратив для коллег и доклада |
+| `d2l_hypothesis_plan.md` | мотивация, дизайн, условия, статус и план следующих шагов |
+| `d2l_hypothesis_full_squad_report.md` | полный отчет по SQuAD с таблицами результатов |
+| `d2l_flash_attention_env.md` | conda-окружение, команды запуска и runtime |
+
+Короткий вывод эксперимента: D2L показывает measurable but weak internalization. Правильный hidden question повышает QA F1, а правильная hidden instruction повышает format compliance, но visible prompting остается намного сильнее.
+
+## Установка
+
+Базовая установка исходного проекта:
+
+```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ./install.sh
 ```
 
-## 🤗 Pre-Trained Models
-```
+Для локальных SQuAD-прогонов использовалась отдельная `conda`-среда `d2l-flash`; команды описаны в `d2l_flash_attention_env.md`.
+
+## Предобученные модели
+
+```bash
 uv run huggingface-cli login
 uv run huggingface-cli download SakanaAI/doc-to-lora --local-dir trained_d2l --include "*/"
 ```
 
-## 🚀 Python API Usage
+## API Python
+
 ```python
-# caveat: this interface only supports non-batched inputs
-# for batched inference please see `src/ctx_to_lora/modeling/hypernet.py`
+# Интерфейс ниже поддерживает только single-example inference.
+# Для batched inference см. src/ctx_to_lora/modeling/hypernet.py.
 import torch
 
 from ctx_to_lora.model_loading import get_tokenizer
 from ctx_to_lora.modeling.hypernet import ModulatedPretrainedModel
 
-# model loading
 checkpoint_path = "trained_d2l/gemma_demo/checkpoint-80000/pytorch_model.bin"
 state_dict = torch.load(checkpoint_path, weights_only=False)
 model = ModulatedPretrainedModel.from_state_dict(
@@ -43,7 +64,6 @@ model = ModulatedPretrainedModel.from_state_dict(
 model.reset()
 tokenizer = get_tokenizer(model.base_model.name_or_path)
 
-# prepare data
 doc = open("data/sakana_wiki.txt", "r").read()
 chat = [{"role": "user", "content": "Tell me about Sakana AI."}]
 chat_ids = tokenizer.apply_chat_template(
@@ -54,49 +74,47 @@ chat_ids = tokenizer.apply_chat_template(
     return_tensors="pt",
 ).to(model.device)
 
-
-# calls after internalization will be influenced by internalized info
 model.internalize(doc)
 
 outputs = model.generate(input_ids=chat_ids, max_new_tokens=512)
 print(tokenizer.decode(outputs[0]))
 
-
-# remove internalized info
+# Чтобы убрать internalized context:
 # model.reset()
-
-# without internalized info, the model will halucinate
-# outputs = model.generate(input_ids=chat_ids, max_new_tokens=512)
-# print(tokenizer.decode(outputs[0]))
 ```
 
-### 🎮 Interactive Demo
+## Интерактивная демо-страница
+
 ```bash
 uv run demo/app.py
 ```
+
 <div align="center">
     <h3>Video Demo</h3>
     <video src="https://github.com/user-attachments/assets/16781365-5ec2-4c1c-b4f4-aeeebe3c2be5" controls autoplay muted playsinline preload="metadata" width="900"></video>
 </div>
 
-### 🧪 Experimental Scripts
-To run any of the following scripts, use `uv run $PATH_TO_SCRIPT` from the root of this project.
+## Экспериментальные скрипты
 
+Команды запускаются из корня проекта через `uv run`.
 
-| Experiment                           | Data prep                             | Training                      | Evaluation                   | Notes                                                                                                                               |
-| ------------------------------------ | ------------------------------------- | ----------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| [Main experiment](scripts/main_exp/) | `scripts/main_exp/0-download_data.sh` | `scripts/main_exp/1-train.sh` | `scripts/main_exp/eval/*.sh` | Downloading data is fastest; regenerate only if you need fresh synthetic data. Evaluation scripts reproduce the main paper metrics. |
-| [NIAH](scripts/niah/)                | `scripts/niah/0-gen_data.sh`          | `scripts/niah/1-train.sh`     | `scripts/niah/2-eval.sh`     | Run the scripts in order; data generation only needs to happen once                                                                 |
+| Эксперимент | Подготовка данных | Training | Evaluation | Комментарий |
+|---|---|---|---|---|
+| [Main experiment](scripts/main_exp/) | `scripts/main_exp/0-download_data.sh` | `scripts/main_exp/1-train.sh` | `scripts/main_exp/eval/*.sh` | Воспроизводит основные эксперименты статьи. |
+| [NIAH](scripts/niah/) | `scripts/niah/0-gen_data.sh` | `scripts/niah/1-train.sh` | `scripts/niah/2-eval.sh` | Needle-in-a-haystack setup. |
 
+## Viewer для self-generated данных
 
-### 🔬 Self-Generated Data Viewer
-After downloading/generating the data, we can see samples of the data using this script.
+После скачивания или генерации данных можно посмотреть примеры через viewer:
+
 ```bash
 uv run webui/self_gen_viewer.py
 ```
-See more info at [webui/SELF_GEN_VIEWER.md](webui/SELF_GEN_VIEWER.md).
 
-### 📚 Citation
+Подробнее: `webui/SELF_GEN_VIEWER.md`.
+
+## Цитирование
+
 ```bibtex
 @techreport{sakana2025doc-to-lora,
   title       = {{Doc-to-LoRA: Learning to Instantly Internalize Contexts}},

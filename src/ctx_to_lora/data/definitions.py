@@ -127,6 +127,27 @@ DS_KWARGS = {
     ),
 }
 
+D2L_HYPOTHESIS_SQUAD_CONDITIONS = (
+    "content_adapter",
+    "content_wrong",
+    "instruction_adapter",
+    "instruction_wrong",
+    "prompt_only",
+)
+D2L_HYPOTHESIS_SQUAD_DATASETS = [
+    f"d2l_hypothesis/squad/{condition}"
+    for condition in D2L_HYPOTHESIS_SQUAD_CONDITIONS
+]
+for ds_name in D2L_HYPOTHESIS_SQUAD_DATASETS:
+    condition = ds_name.split("/")[-1]
+    data_files = (
+        f"data/raw_datasets/d2l_hypothesis/squad/{condition}/validation.jsonl"
+    )
+    DS_KWARGS[ds_name] = dict(
+        validation=dict(path="json", data_files=data_files, split="train"),
+        test=dict(path="json", data_files=data_files, split="train"),
+    )
+
 # add ctx_numbers
 tok_bins = [(64, 128), (128, 256), (256, 512)] + [
     (512 + 256 * i, 512 + 256 * (i + 1)) for i in range(14)
@@ -179,6 +200,7 @@ CLOSED_QA_DATASETS = {
     "ropes",
     "drop",
 }
+CLOSED_QA_DATASETS.update(D2L_HYPOTHESIS_SQUAD_DATASETS)
 
 MULTI_ANSWER_DATASETS = {
     "longbench/qasper",
@@ -192,6 +214,7 @@ MULTI_ANSWER_DATASETS = {
     "squad_assistant_ctx_no_passage",
     "drop",
 }
+MULTI_ANSWER_DATASETS.update(D2L_HYPOTHESIS_SQUAD_DATASETS)
 
 
 for ds_name in list(CLOSED_QA_DATASETS):

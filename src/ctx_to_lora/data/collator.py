@@ -9,6 +9,22 @@ from ctx_to_lora.utils import check_is_iterable, concat_list
 
 flattener = DataCollatorWithFlattening()
 
+D2L_HYPOTHESIS_METADATA_KEYS = [
+    "condition",
+    "instruction_type",
+    "instruction",
+    "question",
+    "gold_answer",
+    "source_index",
+    "wrong_context_source_index",
+]
+
+
+def drop_eval_metadata(inp_list):
+    for inp in inp_list:
+        for key in D2L_HYPOTHESIS_METADATA_KEYS:
+            inp.pop(key, None)
+
 
 def flatten_if_not_packed(inp_list):
     # no padding
@@ -66,6 +82,7 @@ def eval_collator(inp_list, tokenizer):
     # only used for teacher-forcing eval
     # input is a list of tokenized sequences
     padding_kwargs = dict(padding=True, padding_side="right", return_tensors="pt")
+    drop_eval_metadata(inp_list)
 
     has_ctx_ids = "ctx_ids" in inp_list[0]
     if has_ctx_ids:
@@ -105,6 +122,7 @@ def eval_collator(inp_list, tokenizer):
 
 def generation_collator(inp_list, tokenizer):
     padding_kwargs = dict(padding=True, padding_side="left", return_tensors="pt")
+    drop_eval_metadata(inp_list)
     input_ids = [torch.tensor(x.pop("input_ids")) for x in inp_list]
     labels = [x.pop("labels") for x in inp_list]
     for i, label in enumerate(labels):
