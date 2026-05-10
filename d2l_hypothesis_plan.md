@@ -4,7 +4,7 @@
 
 Цель проекта - проверить, что именно переносит Doc-to-LoRA через сгенерированный LoRA-адаптер: содержательную информацию из запроса или инструкцию о формате ответа. Мы разделили эти два сигнала на SQuAD и прогнали D2L checkpoint на полном validation split.
 
-Текущий вывод: D2L показывает измеримую, но слабую internalization. Правильный скрытый вопрос улучшает QA F1 относительно wrong-adapter и no-context baseline, а правильная скрытая инструкция резко повышает format compliance относительно wrong instruction. При этом visible prompting остается намного сильнее.
+Текущий вывод: D2L показывает измеримую, но слабую internalization. Правильный скрытый вопрос улучшает QA F1 относительно wrong-adapter и no-context baseline, а правильная скрытая инструкция резко повышает format compliance относительно no-instruction и wrong-instruction baselines. При этом visible prompting остается намного сильнее.
 
 ## Мотивация
 
@@ -125,10 +125,10 @@ trained_d2l/qwen_4b_d2l/eval-results-20000/20260508-122632_0f46e0ac/
 
 ## Full SQuAD Controls
 
-Контрольный base-model прогон запущен в `tmux`:
+Контрольный base-model прогон завершен:
 
 ```text
-d2l_squad_controls
+FINISHED_AT=2026-05-10T14:26:02+03:00 EXIT_STATUS=0
 ```
 
 Готовые результаты:
@@ -141,7 +141,7 @@ eval_results/Qwen/Qwen3-4B-Instruct-2507/20260509-230150_f4e0af7f/
 |---|---:|---:|---:|---:|---:|---:|---:|
 | `prompt_only_no_context` | 10,570 | 9,447 | 0.698 | 0.615 | 0.931 | 0.894 | 0.731 |
 | `content_adapter_no_context` | 10,570 | 4,817 | 0.098 | 0.064 | 0.451 | 0.456 | 0.105 |
-| `instruction_adapter_no_context` | in progress | in progress | in progress | in progress | in progress | in progress | in progress |
+| `instruction_adapter_no_context` | 10,570 | 49 | 0.309 | 0.202 | 0.946 | 0.0046 | 0.605 |
 
 Для content transfer уже можно поставить D2L между lower и upper bound:
 
@@ -158,25 +158,38 @@ D2L закрывает примерно `15%` разрыва между no-quest
 (0.189 - 0.098) / (0.698 - 0.098) ~= 0.15
 ```
 
+Для instruction transfer итоговое сравнение:
+
+| run | visible information | format compliance |
+|---|---|---:|
+| no hidden instruction | passage + question | 0.0046 |
+| wrong hidden instruction | passage + question + wrong adapter | 0.027 |
+| correct hidden instruction via D2L | passage + question + correct adapter | 0.354 |
+| visible full prompt | passage + question + instruction | 0.894 |
+
+D2L закрывает примерно `39%` разрыва между no-instruction lower bound и visible-prompt upper bound:
+
+```text
+(0.354 - 0.0046) / (0.894 - 0.0046) ~= 0.39
+```
+
 ## Интерпретация
 
 Content transfer работает измеримо: правильный скрытый вопрос дает лучший ответ, чем wrong question и no-context control. Но абсолютный результат низкий: `0.189` против `0.698` у visible prompting.
 
-Instruction transfer тоже работает измеримо: compliance растет с `0.027` при wrong instruction до `0.354` при correct hidden instruction. Это значит, что простая форматная policy частично переносится через D2L adapter.
+Instruction transfer тоже работает измеримо: compliance растет с `0.0046` без инструкции и `0.027` при wrong instruction до `0.354` при correct hidden instruction. Это значит, что простая форматная policy частично переносится через D2L adapter.
 
-Итоговая формулировка должна быть аккуратной: текущий checkpoint показывает measurable but weak internalization. Это не доказательство надежной замены prompt'а и не доказательство, что D2L robustly переносит сложные policies.
+Итоговая формулировка должна быть аккуратной: текущий checkpoint показывает measurable but weak internalization. Простая версия гипотезы "content переносится лучше instruction" не подтверждается; в этой постановке instruction transfer выглядит сильнее по gap closure. Но это не доказательство надежной замены prompt'а и не доказательство, что D2L robustly переносит сложные policies.
 
 ## Что еще нужно доделать
 
-1. Дождаться `instruction_adapter_no_context`, чтобы закрыть lower bound для instruction transfer.
+1. Разбить результаты по `instruction_type`: отдельно `answer_only` и `full_sentence`.
 
-2. Разбить результаты по `instruction_type`: отдельно `answer_only` и `full_sentence`.
+2. Сделать ручной audit generated outputs: по 30-50 примеров на condition.
 
-3. Сделать ручной audit generated outputs: по 30-50 примеров на condition.
+3. Повторить эксперимент на ROPES и QASPER, если нужен более сильный итоговый отчет.
 
-4. Повторить эксперимент на ROPES и QASPER, если нужен более сильный итоговый отчет.
-
-5. Для улучшения качества попробовать checkpoint, специально обученный на hidden question / hidden instruction setup.
+4. Для улучшения качества попробовать checkpoint, специально обученный на hidden question / hidden instruction setup.
 
 ## Артефакты
 
@@ -192,4 +205,3 @@ Instruction transfer тоже работает измеримо: compliance ра
 trained_d2l/qwen_4b_d2l/eval-results-20000/20260508-122632_0f46e0ac/evaluation_results_generation.csv
 eval_results/Qwen/Qwen3-4B-Instruct-2507/20260509-230150_f4e0af7f/evaluation_results_generation_no_context.csv
 ```
-

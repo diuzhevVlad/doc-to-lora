@@ -142,19 +142,25 @@ Wall-clock runtime для 4 D2L-условий по 100 примеров: `914` 
 
 ## Base-model controls runtime
 
-Controls запущены отдельно в `tmux` session:
+Controls были запущены отдельно в `tmux` session:
 
 ```text
 d2l_squad_controls
 ```
 
-Готовые runtime:
+Финальные runtime:
 
 | control | samples | runtime | samples/sec |
 |---|---:|---:|---:|
 | `prompt_only_no_context` | 10,570 | 1:58:43 | 1.484 |
 | `content_adapter_no_context` | 10,570 | 6:43:48 | 0.436 |
-| `instruction_adapter_no_context` | in progress | in progress | in progress |
+| `instruction_adapter_no_context` | 10,570 | 5:08:58 | 0.570 |
+
+Control session завершилась успешно:
+
+```text
+FINISHED_AT=2026-05-10T14:26:02+03:00 EXIT_STATUS=0
+```
 
 ## Почему Flash-Attention не дал большого ускорения
 
@@ -180,16 +186,10 @@ src/ctx_to_lora/modeling/hypernet.py
 
 Смысл cleanup: перед повторной инициализацией checkpoint удалить старые `hypernet` и `ctx_encoder`, затем очистить CUDA cache. На 16 GB GPU это предотвращает CUDA OOM до начала evaluation.
 
-## Как проверить текущий прогон
+## Где лежат результаты
 
 ```bash
-tmux attach -t d2l_squad_controls
-```
-
-Лог:
-
-```text
-logs/d2l_squad_controls/full_squad_controls_20260509-230145.log
+trained_d2l/qwen_4b_d2l/eval-results-20000/20260508-122632_0f46e0ac/evaluation_results_generation.csv
 ```
 
 CSV controls:
@@ -198,3 +198,8 @@ CSV controls:
 eval_results/Qwen/Qwen3-4B-Instruct-2507/20260509-230150_f4e0af7f/evaluation_results_generation_no_context.csv
 ```
 
+Лог control run:
+
+```text
+logs/d2l_squad_controls/full_squad_controls_20260509-230145.log
+```
